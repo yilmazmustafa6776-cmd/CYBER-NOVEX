@@ -30,12 +30,54 @@ def network_info():
 
 def device_scanner():
     print(GREEN + "\n[ NOVEX DEVICE SCANNER ]" + RESET)
-    result = subprocess.run(
-        ["nmap", "-sn", "-oN", "devices.txt", "192.168.0.0/24"],
-        capture_output=True,
-        text=True
-    )
-    print(result.stdout if result.returncode == 0 else result.stderr)
+
+    try:
+        route = subprocess.run(
+            ["ip", "-4", "route", "show", "default"],
+            capture_output=True, text=True, check=True
+        )
+
+        parts = route.stdout.split()
+        if "dev" not in parts:
+            print("Could not detect network interface.")
+            return
+
+        interface = parts[parts.index("dev") + 1]
+
+        addr = subprocess.run(
+            ["ip", "-o", "-4", "addr", "show", "dev", interface, "scope", "global"],
+            capture_output=True, text=True, check=True
+        )
+
+        import ipaddress
+        network = None
+
+        for line in addr.stdout.splitlines():
+            for token in line.split():
+                if "/" in token:
+                    try:
+                        network = str(ipaddress.ip_interface(token).network)
+                        break
+                    except ValueError:
+                        pass
+            if network:
+                break
+
+        if not network:
+            print("Could not detect local network.")
+            return
+
+        print("Detected network:", network)
+        confirm = input("Scan this network? Only scan networks you own or have permission to test. [y/N]: ")
+
+        if confirm.lower() != "y":
+            print("Scan cancelled.")
+            return
+
+        subprocess.run(["nmap", "-sn", network])
+
+    except Exception as error:
+        print("Scanner Error:", error)
 
 def dashboard():
     print(GREEN + "\n[ SECURITY DASHBOARD ]")
